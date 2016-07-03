@@ -1,67 +1,278 @@
-#===================================================================================#
-def infograbber():
-    usrtarget = raw_input('Enter Target PKMN name: ')
-    usrtarget = usrtarget.upper()
-    try:
-        pkmn = POKEMON[usrtarget]
-    except KeyError:
-        print('Entered pokemon not found in database; program restarting.\n')
-        infograbber()
-    try:
-        usrseed = int('0x' + raw_input("Enter Hexadecimal IV frame 1 Seed: 0x"), 16)
-        if usrseed > 0xFFFFFFFF:
-            raise ValueError
-    except ValueError:
-        print('Entered seed is invalid and cannot be used; program restarting.\n')
-        infograbber()
-    final_result = casehandler(usrseed,usrtarget,pkmn)
-    print(final_result + '\n')
-    hseed = hexify(usrseed)
-    if final_result[0:1] == 'H':
-        var_name = "NLChk_Valid"
-    else:
-        var_name = "NLChk_Invalid"
-    var_name = var_name + ".txt"
-    string = hseed + ', ' + final_result
-    outputtotxt(var_name,string)
-    print('Entered pokemon, seed, and subsequent result have been exported to .txt.\n')
+#=============================================================================================#
+import re
+import sys
+#=============================================================================================#
+def main():
+    global ivscollect,natcollect
+    ivscollect = re.compile('\d+')
+    natcollect = re.compile('[a-zA-z]+')
     infograbber()
-
-#===================================================================================#
-
-def casehandler(seed,target_name,target_db):
-    name = target_name
-    nlnum = target_db[0]
-    pkmnpos = target_db[1]
+    looplist = ivsloopgenerator()
+    print('Grabbing possible IV seeds:')
+    seedlist = existchk(looplist)
+    print('Done!')
+    if seedlist == []:
+        print('No IV/Nature combos found with entered criteria; program restarting.\n')
+    else:
+        print('Comparing seeds versus NLs:')
+        for data in seedlist:
+            resultstr = casehandler(data[0])
+            if resultstr[0:1] == 'H':
+                var_name = "NLChk_Valid"
+                sys.stdout.write('.')
+                sys.stdout.flush()
+            else:
+                var_name = "NLChk_Invalid"
+            var_name = var_name + ".txt"
+            final_result = data[1] + ',' + data[2] + ',' + data[3] + ',' + resultstr
+            outputtotxt(var_name,final_result)
+#=============================================================================================#
+def infograbber():
+    print('\nEnter desired pokemon name; NLChk currently only supports 1 pokemon per search,')
+    print('though that may or may not change in future versions of this program.\n')
+    valid = False
+    while valid == False:
+        valid = pokeinput()
+    print('\nEnter desired search limits for IVs (ordering = HP->Atk->Def->SpA->SDf->Spe).')
+    print('Any non-numeric characters can separate IVs (for both lower and upper limits).')
+    print('Note that NLChk will only use the first 6 input IVs, despite accepting more.\n')
+    valid = False
+    while valid == False:
+        valid = ivsinput_lower()
+    print('\nEnter desired nature(s) to search for; for multiple entries, seperate each with')
+    print('a non-alphabetical character (cannot contain anything in a-z or A-Z). Beyond')
+    print('that, it doesn\'t matter what you use to seperate them; NLChk will do the rest.\n')
+    valid = False
+    while valid == False:
+        valid = natinput()
+#=============================================================================================#
+def pokeinput():
+    global pokelist,poke_input
+    pokelist = []
+    poke_input = (raw_input('Desired Pokemon = ')).upper()
+    valid = False
+    try:
+        pokelist = POKEMON[poke_input]
+    except KeyError:
+        print('\n\"%s\" is not a valid pokemon for use with NLChk. Please check the README' % poke_input)
+        print('for what is currently supported / unsupported and planned for future versions.\n')
+    if pokelist != []:
+        valid = True
+    return valid
+#=============================================================================================#
+def natinput():
+    global confirmednats
+    confirmednats = []
+    nat_input = raw_input('Desired Nature(s) = ')
+    desirednatlist = natcollect.findall(nat_input)
+    if desirednatlist == []:
+        print('No natures have been entered; please enter valid nature input.\n')
+        valid = False
+    else:
+        for nat in desirednatlist:
+            nature = nat.upper()
+            try:
+                nature = NATUREVERSE[nature]
+                confirmednats.append(nature)
+            except KeyError:
+                print('\"%s\" is not a valid nature; please enter an all-valid nature input.\n' % desirednatlist[nat])
+                valid = False
+                break
+        else:
+            valid = True
+    return valid
+#=============================================================================================#
+def ivsinput_lower():
+    global ivs_lower
+    ivs_lower = []
+    ivs_input = raw_input('Lower IV Limits = ')
+    desiredivslist = ivscollect.findall(ivs_input)
+    valid = False
+    if desiredivslist == []:
+        print('No Lower IVs entered! please enter a valid IV spread.\n')
+    else:
+        for ivs in range(6):
+            try:
+                if len(desiredivslist[ivs]) > 2:
+                    raise IndexError
+                try:
+                    intivs = int(desiredivslist[ivs],10)
+                    if(intivs > 31 or intivs < 0):
+                        raise IndexError
+                    else:
+                        ivs_lower.append(intivs)
+                except ValueError:
+                    raise IndexError
+            except IndexError:
+                print('Invalid Lower IV input; please enter a valid IV spread.\n')
+                break
+        else:
+            valid = ivsinput_upper()
+    return valid
+#=============================================================================================#
+def ivsinput_upper():
+    global ivs_upper
+    ivs_upper = []
+    valid = False
+    ivs_input = raw_input('Upper IV Limits = ')
+    desiredivslist = ivscollect.findall(ivs_input)
+    if desiredivslist == []:
+        print('No Upper IVs entered! please enter a valid pair of IV spreads.\n')
+    else:
+        for ivs in range(6):
+            try:
+                if len(desiredivslist[ivs]) > 2:
+                    raise IndexError
+                try:
+                    intivs = int(desiredivslist[ivs],10)
+                    if(intivs > 31 or intivs < 0):
+                        raise IndexError
+                    else:
+                        ivs_upper.append(intivs)
+                except ValueError:
+                    raise IndexError
+            except IndexError:
+                print('Invalid Upper IV input; please enter a valid pair of IV spreads.\n')
+                break
+        else:
+            for chk in range(6):
+                try:
+                    a = ivs_upper[chk]
+                    b = ivs_lower[chk]
+                    if b > a:
+                        raise ValueError
+                except ValueError:
+                    print('Cannot search with lower limit greater than upper. Please re-enter both.\n')
+                    break
+            else:
+                valid = True
+    return valid
+#=============================================================================================#
+def ivsloopgenerator():
+    looplist = []
+    for g in range(6):
+        temp = []
+        for h in range(ivs_lower[g],(ivs_upper[g]+1),1):
+            temp.append(h)
+        looplist.append(temp)
+    return looplist
+#=============================================================================================#
+def x8calc(ivL,ivM,ivH):
+    x8 = ivL + (ivM << 5) + (ivH << 10)
+    return x8
+#=============================================================================================#
+def existchk(looplist):
+    dotchk = 0
+    hp = looplist[0]
+    at = looplist[1]
+    df = looplist[2]
+    sa = looplist[3]
+    sd = looplist[4]
+    sp = looplist[5]
+    spos = []
+    for a in hp:
+        hpiv = a
+        for b in at:
+            ativ = b
+            for c in df:
+                dfiv = c
+                for d in sa:
+                    saiv = d
+                    for e in sd:
+                        sdiv = e
+                        for f in sp:
+                            spiv = f
+                            x8 = x8calc(hpiv,ativ,dfiv)
+                            x8_2 = x8 ^ 0x8000
+                            ex8 = x8calc(sdiv,saiv,spiv)
+                            ex8_2 = ex8 ^ 0x8000
+                            for cnt in range(0x1fffe):
+                                x_test = cnt & 1
+                                if x_test == 0:
+                                    ivs_1 = x8
+                                else:
+                                    ivs_1 = x8_2
+                                if cnt < 0xffff:
+                                    seed = (ivs_1 << 16) + (cnt & 0xffff)
+                                else:
+                                    seed = (ivs_1 << 16) + ((cnt+1) & 0xffff)
+                                ivs_2 = prngbackward(seed,1) >> 16
+                                if(ivs_2 == ex8 or ivs_2 == ex8_2):
+                                    iseed = prngbackward(seed,2)
+                                    tf,nat = natchk(iseed)
+                                    if tf == True:
+                                        hexiseed = hexify(iseed)
+                                        ivstr = ivstrconstruct(hpiv,ativ,dfiv,saiv,sdiv,spiv)
+                                        cont = [iseed,hexiseed,NATURES[nat],ivstr]
+                                        spos.append(cont)
+                                        if (dotchk & 0x1f) == 0:
+                                            sys.stdout.write('.')
+                                            sys.stdout.flush()
+                                        dotchk = dotchk + 1
+    return spos
+#=============================================================================================#
+def ivstrconstruct(hpiv,ativ,dfiv,saiv,sdiv,spiv):
+    temp = [hpiv,ativ,dfiv,saiv,sdiv,spiv]
+    rcomp = []
+    for z in range(6):
+        iv = str(temp[z])
+        if len(iv) < 2:
+            iv = '0' + iv
+        rcomp.append(iv)
+    ivstr = '%s/%s/%s/%s/%s/%s' % (rcomp[0],rcomp[1],rcomp[2],rcomp[3],rcomp[4],rcomp[5])
+    return ivstr
+#=============================================================================================#
+def natchk(initseed):
+    s = prngforward(initseed,4)
+    pidh = s >> 16
+    s = prngforward(s,1)
+    pidl = s >> 16
+    pid = (pidh << 16) + pidl
+    nat = pid % 25
+    for n in confirmednats:
+        if nat == n:
+            return True, nat
+    return False, 'N/A'
+#=============================================================================================#
+def hexify(seed):
+    hseed = hex(seed)
+    hseed = hseed[2:]
+    while len(hseed) < 8:
+        hseed = '0' + hseed
+    hseed = '0x' + hseed
+    return hseed
+#=============================================================================================#
+def casehandler(seed):
+    name = poke_input
+    nlnum = pokelist[0]
+    pkmnpos = pokelist[1]
     if nlnum == 0:
         frv_str = RESULT[0] + name + REASON[0]
         return frv_str
     elif nlnum == 1:
         if pkmnpos == 1:
-            pf_str,r_str = sNL_1S(seed,target_db)
+            pf_str,r_str = sNL_1S(seed)
             frv_str = pf_str + name + r_str
             return frv_str
         else:
-            pf_str,r_str = sNL_2S(seed,target_db)
+            pf_str,r_str = sNL_2S(seed)
             frv_str = pf_str + name + r_str
             return frv_str
     else:
         if pkmnpos == 1:
-            pf_str,r_str = mNL_1S(seed,target_db)
+            pf_str,r_str = mNL_1S(seed)
             frv_str = pf_str + name + r_str
             return frv_str
         else:
-            pf_str,r_str = mNL_2S(seed,target_db)
+            pf_str,r_str = mNL_2S(seed)
             frv_str = pf_str + name + r_str
             return frv_str
-
-#===================================================================================#
-
-def sNL_1S(seed,pkmn):
+#=============================================================================================#
+def sNL_1S(seed):
     s = prngbackward(seed,1)
     gv,nl,s = gvnlchkB(s)
-    test = gvcomp(gv,pkmn[2],pkmn[3])
-    if test == True and nl == pkmn[4]:
+    test = gvcomp(gv,pokelist[2],pokelist[3])
+    if test == True and nl == pokelist[4]:
         pfstring = RESULT[0]
         rstring = REASON[1]
         return pfstring,rstring
@@ -69,11 +280,9 @@ def sNL_1S(seed,pkmn):
         pfstring = RESULT[1]
         rstring = REASON[3]
         return pfstring,rstring
-
-#===================================================================================#
-
-def sNL_2S(seed,pkmn):
-    j,s = sstest(pkmn,seed)
+#=============================================================================================#
+def sNL_2S(seed):
+    j,s = sstest(seed)
     if j == -1:
         pfstring = RESULT[1]
         rstring = REASON[5]
@@ -82,22 +291,20 @@ def sNL_2S(seed,pkmn):
         pfstring = RESULT[0]
         rstring = REASON[2]+SETUP[j]
         return pfstring,rstring
-
-#===================================================================================#
-
-def mNL_1S(seed,pkmn):
+#=============================================================================================#
+def mNL_1S(seed):
     timesB = []
     timesF = []
-    for v in range(0,pkmn[0],1):
+    for v in range(0,pokelist[0],1):
         n = (v * 3) + 4
-        nltest = pkmn[n]
-        gvmin = pkmn[n-2]
-        gvmax = pkmn[n-1]
+        nltest = pokelist[n]
+        gvmin = pokelist[n-2]
+        gvmax = pokelist[n-1]
         if v == 0:
             s = prngbackward(seed,1)
             gv,nl,s = gvnlchkB(s)
-            test = gvcomp(gv,pkmn[2],pkmn[3])
-            if (test == True and nl == pkmn[4]):
+            test = gvcomp(gv,pokelist[2],pokelist[3])
+            if (test == True and nl == pokelist[4]):
                 timesB.append(7)
             else:
                 pfstring = RESULT[1]
@@ -122,12 +329,12 @@ def mNL_1S(seed,pkmn):
                     if(nl == nltest and gvtf == True):
                         tb = True
                 timesB.append(tback+5)
-    for x in range(pkmn[0],0,-1):
+    for x in range(pokelist[0],0,-1):
         n = (x * 3) + 1
-        nltest = pkmn[n]
-        gvmin = pkmn[n-2]
-        gvmax = pkmn[n-1]
-        if x == pkmn[0]:
+        nltest = pokelist[n]
+        gvmin = pokelist[n-2]
+        gvmax = pokelist[n-1]
+        if x == pokelist[0]:
             s = prngforward(s,1)
             timesF.append(7)
         else:
@@ -167,19 +374,17 @@ def mNL_1S(seed,pkmn):
         countstr = ' (%d,%d)' % (countB,countF)
         rstring = rstring + countstr
         return pfstring,rstring
-
-#===================================================================================#
-
-def mNL_2S(seed,pkmn):
+#=============================================================================================#
+def mNL_2S(seed):
     timesB = []
     timesF = []
-    for z in range(0,pkmn[0],1):
+    for z in range(0,pokelist[0],1):
         n = (z*3)+4
-        nltest = pkmn[n]
-        gvmin = pkmn[n-2]
-        gvmax = pkmn[n-1]
+        nltest = pokelist[n]
+        gvmin = pokelist[n-2]
+        gvmax = pokelist[n-1]
         if z == 0:
-            j,s = sstest(pkmn,seed)
+            j,s = sstest(seed)
             if j == -1:
                 pfstring = RESULT[1]
                 rstring = REASON[5]
@@ -204,12 +409,12 @@ def mNL_2S(seed,pkmn):
                     if(nltest == nl and gvtf == True):
                         tb = True
                 timesB.append(tback+5)
-    for k in range(pkmn[0],0,-1):
+    for k in range(pokelist[0],0,-1):
         n = (k*3)+1
-        nltest = pkmn[n]
-        gvmin = pkmn[n-2]
-        gvmax = pkmn[n-1]
-        if k == pkmn[0]:
+        nltest = pokelist[n]
+        gvmin = pokelist[n-2]
+        gvmax = pokelist[n-1]
+        if k == pokelist[0]:
             s = prngforward(s,1)
             timesF.append(12+(j*2))
         else:
@@ -249,21 +454,16 @@ def mNL_2S(seed,pkmn):
         countstr = ' (%d,%d)' % (countB,countF)
         rstring = rstring + countstr
         return pfstring,rstring
-
-#===================================================================================#
-
-def sstest(pkmn,usrseed):
+#=============================================================================================#
+def sstest(usrseed):
     s = prngbackward(usrseed,6)
     for j in range(3):
         gv,nl,s = gvnlchkB(s)
-        test = gvcomp(gv,pkmn[2],pkmn[3])
-        if(test == True and nl == pkmn[4]):
+        test = gvcomp(gv,pokelist[2],pokelist[3])
+        if(test == True and nl == pokelist[4]):
             return (j,s)
     return (-1,s)
-
-#===================================================================================#
-
-
+#=============================================================================================#
 def gvnlchkB(seed):
     s = prngbackward(seed,1)
     pidl = s >> 16
@@ -273,9 +473,7 @@ def gvnlchkB(seed):
     gv = pid & 0xFF
     nl = pid % 25
     return (gv,nl,s)
-
-#===================================================================================#
-
+#=============================================================================================#
 def gvnlchkF(seed):
     s = prngforward(seed,1)
     pidh = s >> 16
@@ -285,64 +483,40 @@ def gvnlchkF(seed):
     gv = pid & 0xFF
     nl = pid % 25
     return (gv,nl,s)
-
-#===================================================================================#
-
+#=============================================================================================#
 def gvcomp(gvval,gvmin,gvmax):
     if(gvval >= gvmin and gvval <= gvmax):
         return True
     return False
-
-#===================================================================================#
-
-def hexify(seed):
-    hseed = hex(seed)
-    hseed = hseed[2:]
-    while len(hseed) < 8:
-        hseed = '0' + hseed
-    hseed = '0x' + hseed
-    return hseed
-
-#===================================================================================#
-
+#=============================================================================================#
 def prngbackward(seed, times):
     s = seed
     for i in range(times):
         s = (s * 0xB9B33155 + 0xA170F641) & 0xFFFFFFFF
     return s
-
-#===================================================================================#
-
+#=============================================================================================#
 def prngforward(seed, times):
     s = seed
     for q in range(times):
         s = (s * 0x000343FD + 0x00269EC3) & 0xFFFFFFFF
     return s
-
-#===================================================================================#
-
+#=============================================================================================#
 def outputtotxt(txtname,string):
     txtf = open(txtname, 'a')
     txtf.write(string + '\n')
     txtf.close()
-
-#===================================================================================#
-
+#=============================================================================================#
 SETUP = {
     0:'first shadow pokemon IVs/Nature set.',
     1:'first shadow pokemon IVs/Nature unset.',
     2:'first shadow pokemon IVs/Nature unset + shiny PID reroll.'
     }
-
-#===================================================================================#
-
+#=============================================================================================#
 RESULT = {
     0:'Hypothetically valid IV/Nature combo for ',
     1:'Invalid IV/Nature combo for '
     }
-
-#===================================================================================#
-
+#=============================================================================================#
 REASON = {
     0:'; this pokemon has no NLs!',
     1:'; passes NL(s).',
@@ -351,9 +525,7 @@ REASON = {
     4:'; NLs will always result in earlier frame(s) than the intended target.',
     5:'; fails all possible 1st shadow combos for the closest NL.'
     }
-
-#===================================================================================#
-
+#=============================================================================================#
 POKEMON = {
     "SPINARAK":[2,1,128,255,6,0,127,12],
     "MAKUHITA":[2,1,0,127,18,128,255,6],
@@ -417,9 +589,72 @@ POKEMON = {
     "MANECTRIC":[1,1,0,127,6],
     "DRAGONITE":[5,1,128,255,0,0,127,12,0,127,12,128,255,18,128,255,0],
     }
-#===================================================================================#
+#=============================================================================================#
+NATURES = {
+    0:'HARDY',
+    1:'LONELY',
+    2:'BRAVE',
+    3:'ADAMANT',
+    4:'NAUGHTY',
+    5:'BOLD',
+    6:'DOCILE',
+    7:'RELAXED',
+    8:'IMPISH',
+    9:'LAX',
+    10:'TIMID',
+    11:'HASTY',
+    12:'SERIOUS',
+    13:'JOLLY',
+    14:'NAIVE',
+    15:'MODEST',
+    16:'MILD',
+    17:'QUIET',
+    18:'BASHFUL',
+    19:'RASH',
+    20:'CALM',
+    21:'GENTLE',
+    22:'SASSY',
+    23:'CAREFUL',
+    24:'QUIRKY',
+    }
+#=============================================================================================#
+NATUREVERSE = {
+    'HARDY':0,
+    'LONELY':1,
+    'BRAVE':2,
+    'ADAMANT':3,
+    'NAUGHTY':4,
+    'BOLD':5,
+    'DOCILE':6,
+    'RELAXED':7,
+    'IMPISH':8,
+    'LAX':9,
+    'TIMID':10,
+    'HASTY':11,
+    'SERIOUS':12,
+    'JOLLY':13,
+    'NAIVE':14,
+    'MODEST':15,
+    'MILD':16,
+    'QUIET':17,
+    'BASHFUL':18,
+    'RASH':19,
+    'CALM':20,
+    'GENTLE':21,
+    'SASSY':22,
+    'CAREFUL':23,
+    'QUIRKY':24,
+    }
+#=============================================================================================#
 print('Pokemon XD: Gale of Darkness / Pokemon Colosseum Nature Lock Checker')
-print('Version 1.4.0, written in Python 2.7.2')
+print('Version 2.1.1, written in Python 2.7.2')
 print('Created by Zari/Zari01 (on Smogon and Reddit, respectively)')
 print('Debugging/testing help provided by Smogon\'s CollectorTogami. Thanks man!\n')
-infograbber()
+#=============================================================================================#
+go = True
+while go == True:
+    main()
+    check = (raw_input('Done! All found data has been exported to .txt; Run another search? (y/n): ')).lower()
+    if check != 'y':
+        go = False
+#=============================================================================================#

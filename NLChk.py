@@ -193,12 +193,16 @@ def existchk(looplist):
                                 else:
                                     ivs_1 = x8_2
                                 if cnt < 0xffff:
+                                    if x_test == 0:
+                                        ivs_1 = x8
+                                    else:
+                                        ivs_1 = x8_2
                                     seed = (ivs_1 << 16) + (cnt & 0xffff)
                                 else:
                                     seed = (ivs_1 << 16) + ((cnt+1) & 0xffff)
-                                ivs_2 = prngbackward(seed,1) >> 16
+                                ivs_2 = prngforward(seed,1) >> 16
                                 if(ivs_2 == ex8 or ivs_2 == ex8_2):
-                                    iseed = prngbackward(seed,2)
+                                    iseed = prngbackward(seed,1)
                                     tf,nat = natchk(iseed)
                                     if tf == True:
                                         hexiseed = hexify(iseed)
